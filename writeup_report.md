@@ -83,10 +83,10 @@ This will make it look like parallel point. To achieve this four points were ide
 
 | Source        | Destination   | 
 |:-------------:|:-------------:| 
-| 300,500       |  75,0         | 
-| 900,500       | 1075,0        |
-| 300,680       | 300,680       |
-| 900,680       | 775, 720      |
+| 525,450       | 1005,0        | 
+| 725,450       | 1000,0        |
+| 275,680       | 425,720       |
+| 925,680       | 775, 720      |
 
 
 **corner_unwarp** : Function primarily applies cv2 prospect transformation that will allow to capture lanes very clearly.
@@ -96,13 +96,13 @@ This will make it look like parallel point. To achieve this four points were ide
 #### Color Thresholding
 
 Sobel gradient thresholding was applied based on threshold parameter provided below. Most of the test images found were having lanes as while, Yellow and Blue,
-Below gradient threshold between 50 and 255 should be able to identify these colored lanes. Also, magnitude threshold was defined as 25-255, so that minor magnitude
-changes below 25 will be ignore and this will avoid identifying shades on road as color changes.
+Below gradient threshold between 50 and 255 should be able to identify these colored lanes. Also, magnitude threshold was defined as 10-255, so that minor magnitude
+changes below 10 will be ignore and this will avoid identifying shades on road as color changes.
 
 ```python
-    gradx = abs_sobel_thresh(s_channel, orient='x', sobel_kernel=ksize, thresh=(120, 255))
-    grady = abs_sobel_thresh(s_channel, orient='y', sobel_kernel=ksize, thresh=(120, 255))
-    mag_binary = mag_thresh(s_channel, sobel_kernel=ksize, mag_thresh=(25, 255))
+    gradx = abs_sobel_thresh(s_channel, orient='x', sobel_kernel=ksize, thresh=(50, 255))
+    grady = abs_sobel_thresh(s_channel, orient='y', sobel_kernel=ksize, thresh=(50, 255))
+    mag_binary = mag_thresh(s_channel, sobel_kernel=ksize, mag_thresh=(10, 255))
     dir_binary = dir_threshold(s_channel, sobel_kernel=ksize, thresh=(0,np.pi/2))
 ```
 
@@ -116,7 +116,7 @@ Each function mentioned above does specific task required for sobel thresholding
 After sobel thresholding, area of interest has been identified that is most probable pixels that will capture lanes and all other pixels were masked
 
 ```python
-region_of_interest = np.array([[[375,0],[1050,0],[1050,720],[375,720]]], np.int32)
+region_of_interest = np.array([[[375,0],[1000,0],[1000,720],[375,720]]], np.int32)
 mask = np.zeros_like(combined)
     if len(img.shape) > 2:
         channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
@@ -193,7 +193,38 @@ As per the requirement for lane smoothing, it was mentoined to capture the lane 
 capture these metrics in Class Line(). All pre-defined metrics in Line are captured and can be displayed as shown below.
 
 
-**Line Class** : This class was built to keep track certain data parameters as required by project.
+**Line Class** : This class was built to keep track certain data parameters as required by project. Below is Line() information captured
+
+```python
+
+print(left_lane)
+self.lane_side:            left
+self.detected:             True
+self.recent_xfitted.shape: (1, 720)
+self.allx.shape:           (720,)
+self.ally.shape:           (720,)
+self.bestx.shape:          (720,)
+self.best_fit:             [ -5.47491060e+01   4.58375672e+04  -9.59341446e+06]
+self.current_fit:          [ -5.47491060e+01   4.58375672e+04  -9.59341446e+06]
+self.prev_fit:             [0.0, 0.0, 0.0]
+self.radius_of_curvature:  18933.5703945 m
+self.line_base_pos:        3.30758531959 m
+self.diffs:                [ 0.  0.  0.] m
+
+print(right_lane)
+self.lane_side:            right
+self.detected:             True
+self.recent_xfitted.shape: (1, 720)
+self.allx.shape:           (720,)
+self.ally.shape:           (720,)
+self.bestx.shape:          (720,)
+self.best_fit:             [ -5.19158987e-01   9.03223298e+02  -3.91598241e+05]
+self.current_fit:          [ -5.19158987e-01   9.03223298e+02  -3.91598241e+05]
+self.prev_fit:             [0.0, 0.0, 0.0]
+self.radius_of_curvature:  24262.8929126 m
+self.line_base_pos:        4.14852006385 m
+self.diffs:                [ 0.  0.  0.] m
+```
 
 If in current frame lines are almost near to parallel, then, adding the current identified lane details to Line() class for averaging it. otherwise, picking up previous
 average value like Line.bestx for drawing lane on the frame.
@@ -204,3 +235,26 @@ average value like Line.bestx for drawing lane on the frame.
 [Apply Pipeline on Video](./white.mp4)
 
 In final automation run, lane finding pipeline applied on video - project_video.mp4.
+
+---
+
+NOTE: Each of test images display to present each step taken in pipe are from first test image. There are 7 more images that were processed with pipeline and checked into /output_image folder.
+
+###Discussion
+
+Following are challenges that faced:
+1. I had challenges in implementing the Line() class. Requirements were not very clear and it took a while before get the full understanding.
+2. Averaging Lane.bestx. because, bestx was the value passed onto final lane marking to get smoothened lane fit values. Each test image was from
+different lane altogether, it was not averaging well. 
+3. Also had some challenges in sobel threshold value adjustment. Need to study more on Computer vision to provide better threshold values.
+
+Where code might fail:
+1. Even though, i was averaging out lane fit value, i think, it still need to be tested with-in city limit(ie away from highway). Within
+city limits, there were sudden curves and complete 90 degree left/right turns. Now sure current technique will fully work. 
+2. As mentioned in above point, i tried pipeline on very hard challenge video and pipeline did fail. Mainly, it seems like road are curvy, there,
+Line() object capturing left_fit and right_fit will be significantly different between frames. therefore, averaging might not lead to good lane marking.
+
+
+
+
+
