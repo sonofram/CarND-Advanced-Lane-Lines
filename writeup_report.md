@@ -17,13 +17,17 @@ The goals / steps of this project are the following:
 
 [//]: # (Image References)
 
+[image0]: ./output_images/uncalibrate_0.jpg "Image - hold chessboard with corner marked"
+[image8]: ./output_images/calibrate_undistort_1.jpg "Image - hold chessboard undistorted 1"
+[image9]: ./output_images/calibrate_undistort_2.jpg "Image - hold chessboard undistorted 2"
+[image10]: ./output_images/calibrate_undistort_3.jpg "Image - hold chessboard undistorted 3"
 [image1]: ./output_images/calibrate_1.jpg "Image - hold chessboard with corner marked"
-[image2]: ./output_images/original_1.jpg "Image - Raw image and calibrated images"
-[image3]: ./output_images/undistorted_1.jpg "Image - Raw image and calibrated images"
-[image4]: ./output_images/warped_1.jpg "Image - unwarped and sobel threshold applied"
-[image5]: ./output_images/sobel_1.jpg "Image - unwarped and sobel threshold applied"
-[image6]: ./output_images/histogram_1.jpg "Image - Lines drawn based on histogram for lane marking"
-[image7]: ./output_images/lane_mark_1.jpg "Image - final image with lane marking"
+[image2]: ./output_images/new_original_1.jpg "Image - Raw image and calibrated images"
+[image3]: ./output_images/new_undistorted_1.jpg "Image - Raw image and calibrated images"
+[image4]: ./output_images/new_warped_1.jpg "Image - unwarped and sobel threshold applied"
+[image5]: ./output_images/new_sobel_1.jpg "Image - unwarped and sobel threshold applied"
+[image6]: ./output_images/new_histogram_1.jpg "Image - Lines drawn based on histogram for lane marking"
+[image7]: ./output_images/new_lane_mark_1.jpg "Image - final image with lane marking"
 [video1]: ./white.mp4 "Video - Lines drawn on the images"
 
 ---
@@ -54,6 +58,11 @@ calibrate_1.jpg.
 
 ![Image - hold chessboard with corner marked][image1]
 
+![Image - undistored image based on calibration1][image8]
+
+![Image - undistored image based on calibration2][image9]
+
+![Image - undistored image based on calibration3][image10]
 
 ### Lane finding Pipeline
 
@@ -83,10 +92,10 @@ This will make it look like parallel point. To achieve this four points were ide
 
 | Source        | Destination   | 
 |:-------------:|:-------------:| 
-| 525,450       | 1005,0        | 
-| 725,450       | 1000,0        |
-| 275,680       | 425,720       |
-| 925,680       | 775, 720      |
+| 560,450       | 100,0        | 
+| 690,450       | 1000,0        |
+| 250,680       | 300,720       |
+| 1050,680       | 1000, 720      |
 
 
 **corner_unwarp** : Function primarily applies cv2 prospect transformation that will allow to capture lanes very clearly.
@@ -100,10 +109,12 @@ Below gradient threshold between 50 and 255 should be able to identify these col
 changes below 10 will be ignore and this will avoid identifying shades on road as color changes.
 
 ```python
-    gradx = abs_sobel_thresh(s_channel, orient='x', sobel_kernel=ksize, thresh=(50, 255))
-    grady = abs_sobel_thresh(s_channel, orient='y', sobel_kernel=ksize, thresh=(50, 255))
-    mag_binary = mag_thresh(s_channel, sobel_kernel=ksize, mag_thresh=(10, 255))
-    dir_binary = dir_threshold(s_channel, sobel_kernel=ksize, thresh=(0,np.pi/2))
+    ksize = 3
+    # Apply each of the thresholding functions
+    gradx = abs_sobel_thresh(s_hls_channel, orient='x', sobel_kernel=ksize, thresh=(50, 255))
+    grady = abs_sobel_thresh(s_hls_channel, orient='y', sobel_kernel=ksize, thresh=(120, 255))
+    mag_binary = mag_thresh(s_hls_channel, sobel_kernel=ksize, mag_thresh=(10, 255))
+    dir_binary = dir_threshold(s_hls_channel, sobel_kernel=ksize, thresh=(0,np.pi/2))
 ```
 
 Each function mentioned above does specific task required for sobel thresholding
@@ -113,11 +124,36 @@ Each function mentioned above does specific task required for sobel thresholding
 **dir_binary** - calculates directional changes
 
 
-After sobel thresholding, area of interest has been identified that is most probable pixels that will capture lanes and all other pixels were masked
+After sobel thresholding, color thresholding was applied for YELLOW and WHITE color this thresholding helped in identifying lane beter.
+Also, L channel in HLS scheme was put in with lower threshold to handle shadows on the road. Area of interest has been identified that is most probable pixels that will capture lanes and all other pixels were masked
 
 ```python
-region_of_interest = np.array([[[375,0],[1000,0],[1000,720],[375,720]]], np.int32)
-mask = np.zeros_like(combined)
+   image_hls = cv2.cvtColor(warped, cv2.COLOR_RGB2HLS)
+    h_hls_channel = image_hls[:,:,0]
+    l_hls_channel = image_hls[:,:,1]
+    s_hls_channel = image_hls[:,:,2]
+    
+     #Threshold on yellow and white color mask
+    lower = np.uint8([  0, 200,   0])
+    upper = np.uint8([255, 255, 255])
+    white_mask = cv2.inRange(image_hls, lower, upper)
+    # yellow color mask
+    lower = np.uint8([ 10,   0, 100])
+    upper = np.uint8([ 40, 255, 255])
+    yellow_mask = cv2.inRange(image_hls, lower, upper)
+    # combine the mask
+    mask_wy = cv2.bitwise_or(white_mask, yellow_mask)
+
+    #filter on light channel to handle shadows on road.    
+    l_hls_channel[l_hls_channel > 100] = 1
+    
+    combined = np.zeros_like(dir_binary)
+    combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) | mask_wy == 255 | (l_hls_channel == 1)  ] = 1
+
+    # Masking Region of interest
+    region_of_interest = np.array([[[150,0],[1200,0],[1200,720],[150,720]]], np.int32)
+    
+    mask = np.zeros_like(combined)
     if len(img.shape) > 2:
         channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
         ignore_mask_color = (255,) * channel_count
@@ -158,17 +194,17 @@ used to draw polynomial that will make lane marking. this step is achieved using
 #### Curvature calculation
 
 Lane curvature calculated in meters based on below code. Below code need 
-	a. As lane curvature will be calculated in world space instead of pixels points, X,Y values identified in lane marking will be multiplied with UNIT conversion constants as shown below.
-	   ym_per_pix = 30/720 # meters per pixel in y dimension
-           xm_per_pix = 3.7/700 # meters per pixel in x dimension
-	b. After unit conversion, points will be used to calculate quadratic points
-	c. Also, lane curvature is alway from point of reference. Therefore, max point in Y-axis(closest to camera) will be consider as point of reference.
-	b. Now, using point of reference and X,Y(point after unit conversion) will be used for curvature calculation based below formula displayed in python syntax.
+1. As lane curvature will be calculated in world space instead of pixels points, X,Y values identified in lane marking will be multiplied with UNIT conversion constants as shown below.
+	- a. ym_per_pix = 30/720 # meters per pixel in y dimension
+	- b. xm_per_pix = 3.7/650 # meters per pixel in x dimension -  **width between the lanes after prespetive transformation is around 650 pixels(average)
+2. After unit conversion, points will be used to calculate quadratic points
+3. Also, lane curvature is alway from point of reference. Therefore, max point in Y-axis(closest to camera) will be consider as point of reference.
+4. Now, using point of reference and X,Y(point after unit conversion) will be used for curvature calculation based below formula displayed in python syntax.
 
 ```python
         # Define conversions in x and y from pixels space to meters
         ym_per_pix = 30/720 # meters per pixel in y dimension
-        xm_per_pix = 3.7/700 # meters per pixel in x dimension
+        xm_per_pix = 3.7/650 # meters per pixel in x dimension
         y_eval = np.max(fity) #Point of reference
         
         # Fit new polynomials to x,y in world space
@@ -204,11 +240,11 @@ self.recent_xfitted.shape: (1, 720)
 self.allx.shape:           (720,)
 self.ally.shape:           (720,)
 self.bestx.shape:          (720,)
-self.best_fit:             [ -5.47491060e+01   4.58375672e+04  -9.59341446e+06]
-self.current_fit:          [ -5.47491060e+01   4.58375672e+04  -9.59341446e+06]
+self.best_fit:             [  2.32524504e-02  -1.01567598e+01   1.16026153e+03]
+self.current_fit:          [  2.32524504e-02  -1.01567598e+01   1.16026153e+03]
 self.prev_fit:             [0.0, 0.0, 0.0]
-self.radius_of_curvature:  18933.5703945 m
-self.line_base_pos:        3.30758531959 m
+self.radius_of_curvature:  3318.47187678 
+self.line_base_pos:        3.29310820949 m
 self.diffs:                [ 0.  0.  0.] m
 
 print(right_lane)
@@ -218,11 +254,11 @@ self.recent_xfitted.shape: (1, 720)
 self.allx.shape:           (720,)
 self.ally.shape:           (720,)
 self.bestx.shape:          (720,)
-self.best_fit:             [ -5.19158987e-01   9.03223298e+02  -3.91598241e+05]
-self.current_fit:          [ -5.19158987e-01   9.03223298e+02  -3.91598241e+05]
+self.best_fit:             [  9.78403128e-03  -1.57865909e+01   6.38731380e+03]
+self.current_fit:          [  9.78403128e-03  -1.57865909e+01   6.38731380e+03]
 self.prev_fit:             [0.0, 0.0, 0.0]
-self.radius_of_curvature:  24262.8929126 m
-self.line_base_pos:        4.14852006385 m
+self.radius_of_curvature:  2651.42896245
+self.line_base_pos:        6.96245667006 m
 self.diffs:                [ 0.  0.  0.] m
 ```
 
